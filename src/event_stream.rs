@@ -48,15 +48,24 @@ impl EventBuilder {
                 let val = val.unwrap_or("");
                 match field {
                     "event" => {
-                        self.event.event = val.to_string();
+                        self.event.event = Some(val.to_string());
                     }
-                    "data" => {
-                        self.event.data.push_str(val);
-                        self.event.data.push('\u{000A}');
-                    }
+                    "data" => match self.event.data {
+                        Some(ref mut data) => {
+                            data.push_str(val);
+                            data.push('\u{000A}');
+                        }
+                        None => {
+                            self.event.data = Some(val.to_string() + "\n");
+                        }
+                    },
                     "id" => {
                         if !val.contains('\u{0000}') {
-                            self.event.id = val.to_string()
+                            if val.is_empty() {
+                                self.event.id = None;
+                            } else {
+                                self.event.id = Some(val.to_string());
+                            }
                         }
                     }
                     "retry" => {
@@ -97,16 +106,12 @@ impl EventBuilder {
         let mut event = builder.event;
         self.event.id = event.id.clone();
 
-        if event.data.is_empty() {
-            return None;
-        }
+        event.data.as_ref()?;
 
-        if is_lf(event.data.chars().next_back().unwrap()) {
-            event.data.pop();
-        }
-
-        if event.event.is_empty() {
-            event.event = "message".to_string();
+        if let Some(data) = &mut event.data {
+            if is_lf(data.chars().next_back().unwrap()) {
+                data.pop();
+            }
         }
 
         Some(event)
@@ -137,7 +142,7 @@ pub struct EventStream<S> {
     buffer: String,
     builder: EventBuilder,
     state: EventStreamState,
-    last_event_id: String,
+    last_event_id: Option<String>,
 }
 }
 
@@ -149,19 +154,19 @@ impl<S> EventStream<S> {
             buffer: String::new(),
             builder: EventBuilder::default(),
             state: EventStreamState::NotStarted,
-            last_event_id: String::new(),
+            last_event_id: None,
         }
     }
 
     /// Set the last event ID of the stream. Useful for initializing the stream with a previous
     /// last event ID
     pub fn set_last_event_id(&mut self, id: impl Into<String>) {
-        self.last_event_id = id.into();
+        self.last_event_id = Some(id.into());
     }
 
     /// Get the last event ID of the stream
-    pub fn last_event_id(&self) -> &str {
-        &self.last_event_id
+    pub fn last_event_id(&self) -> Option<&str> {
+        self.last_event_id.as_deref()
     }
 }
 
@@ -310,8 +315,8 @@ mod tests {
             .await
             .unwrap(),
             vec![Event {
-                event: "message".to_string(),
-                data: "Hello, world!".to_string(),
+                event: None,
+                data: Some("Hello, world!".to_string()),
                 ..Default::default()
             }]
         );
@@ -324,8 +329,8 @@ mod tests {
             .await
             .unwrap(),
             vec![Event {
-                event: "message".to_string(),
-                data: "Hello, world!".to_string(),
+                event: None,
+                data: Some("Hello, world!".to_string()),
                 ..Default::default()
             }]
         );
@@ -339,8 +344,8 @@ mod tests {
             .await
             .unwrap(),
             vec![Event {
-                event: "message".to_string(),
-                data: "Hello, world!".to_string(),
+                event: None,
+                data: Some("Hello, world!".to_string()),
                 ..Default::default()
             }]
         );
@@ -361,8 +366,8 @@ mod tests {
             .await
             .unwrap(),
             vec![Event {
-                event: "message".to_string(),
-                data: "Hello,\nworld!".to_string(),
+                event: None,
+                data: Some("Hello,\nworld!".to_string()),
                 ..Default::default()
             }]
         );
@@ -375,13 +380,13 @@ mod tests {
             .unwrap(),
             vec![
                 Event {
-                    event: "message".to_string(),
-                    data: "Hello,".to_string(),
+                    event: None,
+                    data: Some("Hello,".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "world!".to_string(),
+                    event: None,
+                    data: Some("world!".to_string()),
                     ..Default::default()
                 }
             ]
@@ -406,18 +411,18 @@ data: This is the third message.
             .unwrap(),
             vec![
                 Event {
-                    event: "message".to_string(),
-                    data: "This is the first message.".to_string(),
+                    event: None,
+                    data: Some("This is the first message.".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "This is the second message, it\nhas two lines.".to_string(),
+                    event: None,
+                    data: Some("This is the second message, it\nhas two lines.".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "This is the third message.".to_string(),
+                    event: None,
+                    data: Some("This is the third message.".to_string()),
                     ..Default::default()
                 }
             ]
@@ -440,18 +445,18 @@ data: 113411
             .unwrap(),
             vec![
                 Event {
-                    event: "add".to_string(),
-                    data: "73857293".to_string(),
+                    event: Some("add".to_string()),
+                    data: Some("73857293".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "remove".to_string(),
-                    data: "2153".to_string(),
+                    event: Some("remove".to_string()),
+                    data: Some("2153".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "add".to_string(),
-                    data: "113411".to_string(),
+                    event: Some("add".to_string()),
+                    data: Some("113411".to_string()),
                     ..Default::default()
                 }
             ]
@@ -468,8 +473,8 @@ data: 10
             .await
             .unwrap(),
             vec![Event {
-                event: "message".to_string(),
-                data: "YHOO\n+2\n10".to_string(),
+                event: None,
+                data: Some("YHOO\n+2\n10".to_string()),
                 ..Default::default()
             },]
         );
@@ -492,19 +497,16 @@ data:  third event
             .unwrap(),
             vec![
                 Event {
-                    event: "message".to_string(),
-                    id: "1".to_string(),
-                    data: "first event".to_string(),
+                    id: Some("1".to_string()),
+                    data: Some("first event".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "second event".to_string(),
+                    data: Some("second event".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: " third event".to_string(),
+                    data: Some(" third event".to_string()),
                     ..Default::default()
                 }
             ]
@@ -524,13 +526,13 @@ data:
             .unwrap(),
             vec![
                 Event {
-                    event: "message".to_string(),
-                    data: "".to_string(),
+                    event: None,
+                    data: Some("".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "\n".to_string(),
+                    event: None,
+                    data: Some("\n".to_string()),
                     ..Default::default()
                 },
             ]
@@ -548,13 +550,13 @@ data: test
             .unwrap(),
             vec![
                 Event {
-                    event: "message".to_string(),
-                    data: "test".to_string(),
+                    event: None,
+                    data: Some("test".to_string()),
                     ..Default::default()
                 },
                 Event {
-                    event: "message".to_string(),
-                    data: "test".to_string(),
+                    event: None,
+                    data: Some("test".to_string()),
                     ..Default::default()
                 },
             ]

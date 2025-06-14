@@ -32,18 +32,17 @@ data:ignored
     let mut stream = response.bytes_stream().eventsource();
 
     let event = stream.next().await.unwrap().unwrap();
-    assert_eq!("my-event", event.event);
+    assert_eq!(Some("my-event".to_string()), event.event);
     assert_eq!(
-        "line1
-line2",
+        Some("line1\nline2".to_string()),
         event.data
     );
-    assert_eq!("my-id", event.id);
+    assert_eq!(Some("my-id".to_string()), event.id);
     assert_eq!(std::time::Duration::from_millis(42), event.retry.unwrap());
 
     let event = stream.next().await.unwrap().unwrap();
-    assert_eq!("message", event.event);
-    assert_eq!("second", event.data);
+    assert_eq!(Some("message".to_string()), event.event);
+    assert_eq!(Some("second".to_string()), event.data);
 
     let event = stream.next().await;
     assert!(event.is_none());
