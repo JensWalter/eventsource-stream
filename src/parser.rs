@@ -25,6 +25,7 @@ use nom::IResult;
 
 #[derive(Debug)]
 pub enum RawEventLine<'a> {
+    #[allow(dead_code)]
     Comment(&'a str),
     Field(&'a str, Option<&'a str>),
     Empty,
